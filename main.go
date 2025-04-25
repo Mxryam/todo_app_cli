@@ -4,8 +4,9 @@ import (
 	"bufio"
 	"flag"
 	"fmt"
-	"strconv"
 	"os"
+	"strconv"
+	"strings"
 )
 
 type User struct {
@@ -18,7 +19,7 @@ type User struct {
 type Task struct {
 	ID         int
 	Title      string
-	Duedate    string
+	DueDate    string
 	CategoryID int
 	IsDone     bool
 	UserID     int
@@ -36,6 +37,8 @@ var userStorage []User
 var authenticatedUser *User
 var taskStorage []Task
 
+const userStoragePath = "user.txt"
+
 func main() {
 
 	//load user storage from file
@@ -44,6 +47,8 @@ func main() {
 	fmt.Println("Hello to TODO app")
 	command := flag.String("command", "no-command", "command to run")
 	flag.Parse()
+
+	// if there is a user record with corresponding data allow the user to continue
 
 	for {
 		runCommand(*command)
@@ -57,7 +62,7 @@ func main() {
 
 func runCommand(command string) {
 
-	if command != "register-user" && command != "exit" && authenticatedUser != nil {
+	if command != "register-user" && command != "exit" && authenticatedUser == nil {
 
 		login()
 
@@ -102,6 +107,7 @@ func createTask() {
 	categoryID, err := strconv.Atoi(category)
 	if err != nil {
 		fmt.Printf("category id is not valid integer, %v\n", err)
+
 		return
 	}
 
@@ -109,12 +115,15 @@ func createTask() {
 	for _, c := range categoryStorage {
 		if c.ID == categoryID && c.UserID == authenticatedUser.ID {
 			isFound = true
+
 			break
 		}
 
 	}
+
 	if !isFound {
-		fmt.Printf("category id is not valid integer, %v\n", err)
+		fmt.Printf("category id is not found\n")
+
 		return
 	}
 
@@ -123,12 +132,12 @@ func createTask() {
 	duedate = scanner.Text()
 
 	task := Task{
-		ID:       len(taskStorage) + 1,
-		Title:    title,
-		Duedate:  duedate,
-		CategoryID: categoryID,
-		IsDone:   false,
-		UserID:   authenticatedUser.ID,
+		ID:      	 len(taskStorage) + 1,
+		Title:   	 title,
+		DueDate: 	 duedate,
+		CategoryID:	 categoryID,
+		IsDone:   	 false,
+		UserID:	     authenticatedUser.ID,
 	}
 
 	taskStorage = append(taskStorage, task)
@@ -147,6 +156,7 @@ func createCategory() {
 	fmt.Println("please enter the category color")
 	scanner.Scan()
 	color = scanner.Text()
+
 	fmt.Println("category", title, color)
 
 	c := Category{
@@ -187,43 +197,12 @@ func registerUser() {
 	}
 
 	userStorage = append(userStorage, user)
-	//sve user data in user.txt file
-	//create user.txt file
-	//write user record in the user.txt file
 
-	path := "user.txt" 
- 
-	var file *os.File
-
-	file, err :=os.OpenFile(path, os.O_APPEND |os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		fmt.Println("path does not exist!", err)
-
-		return
-
-	}
-	
-
-	data :=fmt.Sprintf("id: %d, name: %s, email: %s,password: %s\n", user.ID, user.Name,
-	 user.Email, user.Password)
-
-	var b = []byte(data)
-
-	numberOfWrittenBytes, wErr := file.Write(b)
-	if wErr != nil {
-		fmt.Printf("cant write to the file %v\n", wErr)
-
-		return
-	}
-
-
-	fmt.Println("numberOfWrittenBytes", numberOfWrittenBytes)
-
-	file.Write(b)
-	file.Close()
+	writeUserToFile(user)
 }
 
 func login() {
+	fmt.Println("login process")
 	scanner := bufio.NewScanner(os.Stdin)
 	var email, password string
 
@@ -239,7 +218,6 @@ func login() {
 
 	for _, user := range userStorage {
 		if user.Email == email && user.Password == password {
-
 			authenticatedUser = &user
 
 			break
@@ -249,12 +227,8 @@ func login() {
 	if authenticatedUser == nil {
 		fmt.Println("the email or password is not correct")
 
-		return
 	}
 
-	fmt.Println("category", email, password)
-
-	fmt.Println("user:", email, password)
 }
 
 func listTask() {
@@ -263,4 +237,102 @@ func listTask() {
 			fmt.Println(task)
 		}
 	}
+}
+
+func loadUserStorageFromFile(){
+	file, err :=os.Open(userStoragePath)
+	if err != nil {
+		fmt.Println("cant open the file", err)
+	}
+
+	var data= make([]byte, 1024)
+	_, oErr := file.Read(data)
+	
+	if oErr != nil {
+		fmt.Println("cant read from the file", oErr)
+
+	}
+	var dataStr = string(data)
+
+	//dataStr = strings.Trim(dataStr, "\n")
+
+	userSlice := strings.Split(dataStr, "\n")
+	fmt.Println("userSlice" , len(userSlice))
+	for _, u := range userSlice {
+		if u == "" {
+			continue
+		}
+		//fmt.Println("line of file",index,"user", u)
+		/*user := User{
+			ID: 0,
+			Name: "",
+			Email: "",
+			Password: "",
+		}*/
+		var user = User{}
+		userFields := strings.Split(u, ",")
+		for _, field := range userFields {
+			// fmt.Println(field)
+			values := strings.Split(field, ": ")
+			if len(values) != 2 {
+				fmt.Println("record is not valid", len(values))
+
+				 continue
+			}
+			fieldName := strings.ReplaceAll(values[0], "", "")
+			fieldValue := values[1]
+
+			
+
+			switch fieldName {
+			case "id":
+				id, err := strconv.Atoi(fieldValue)
+				if err != nil {
+					fmt.Println("strconv error", err)
+					return 
+				}
+				user.ID = id
+			case "name":
+				 user.Name = fieldValue
+			case "email":
+				user.Email = fieldValue
+			case "password":
+				user.Password = fieldValue		 
+
+			}
+			
+		}
+		fmt.Printf("user: %+v\n", user)
+	}
+
+	//fmt.Println(data)
+}
+
+func writeUserToFile(user User){
+	var file *os.File
+
+	file, err :=os.OpenFile(userStoragePath, os.O_APPEND |os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		fmt.Println("path does not exist!", err)
+
+		return
+
+	}
+	
+	defer file.Close()
+
+	data :=fmt.Sprintf("id: %d, name: %s, email: %s,password: %s\n", user.ID, user.Name,
+	 user.Email, user.Password)
+
+	var b = []byte(data)
+
+	numberOfWrittenBytes, wErr := file.Write(b)
+	if wErr != nil {
+		fmt.Printf("cant write to the file %v\n", wErr)
+
+		return
+	}
+	fmt.Println("numberOfWrittenBytes", numberOfWrittenBytes)
+
+
 }
