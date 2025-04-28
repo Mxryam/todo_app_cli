@@ -1,9 +1,2 @@
-id: 1, name: maryam, email: m@m,password: 1
-id: 1, name: maryam, email: m@m,password: 1
-id: 2, name: mina, email: mina@m,password: 2
-id: 2, name: mina, email: mina@m,password: 2
-id: 1, name: sonbol, email: s@s,password: 3
-id: 1, name: sonbol, email: s@s,password: 3
-id: 1, name: maral, email: m@m,password: 6
-id: 1, name: maral, email: m@m,password: 6
-id: 1, name: nani, email: n@n,password: 9
+{"ID":1,"Name":"hamoon","Email":"h@h","Password":"81dc9bdb52d04dc20036dbd8313ed055"}
+{"ID":2,"Name":"maryam","Email":"m@m","Password":"827ccb0eea8a706c4c34a16891f84e7b"}

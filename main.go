@@ -2,11 +2,15 @@ package main
 
 import (
 	"bufio"
+	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
 	"strconv"
 	"strings"
+	"crypto/md5"
+    "encoding/hex"
 )
 
 type User struct {
@@ -32,21 +36,40 @@ type Category struct {
 	UserID int
 }
 
-var categoryStorage []Category
-var userStorage []User
-var authenticatedUser *User
-var taskStorage []Task
+var (
+ categoryStorage   []Category
+ userStorage	   []User
+ taskStorage 	   []Task
+ authenticatedUser *User
+ serializationMode  string
+)
 
-const userStoragePath = "user.txt"
+const (
+	userStoragePath = "user.txt"
+	ManDarAvordiSerializationMode = "mandaravordi"
+	JsonSerializationMode = "json"
+)
 
 func main() {
 
-	//load user storage from file
-	loadUserStorageFromFile()
-
-	fmt.Println("Hello to TODO app")
+	serializeMode := flag.String("serialize-mode", ManDarAvordiSerializationMode, "serialization mode to write data to file" )
 	command := flag.String("command", "no-command", "command to run")
 	flag.Parse()
+
+	//load user storage from file
+	loadUserStorageFromFile(*serializeMode)
+
+	fmt.Println("Hello to TODO app")
+
+	
+
+	switch *serializeMode {
+	case ManDarAvordiSerializationMode:
+		 serializationMode = ManDarAvordiSerializationMode
+	default:
+		serializationMode   = JsonSerializationMode 
+		
+	}
 
 	// if there is a user record with corresponding data allow the user to continue
 
@@ -193,7 +216,7 @@ func registerUser() {
 		ID:       len(userStorage) + 1,
 		Name:     name,
 		Email:    email,
-		Password: password,
+		Password: hashThePassword(password),
 	}
 
 	userStorage = append(userStorage, user)
@@ -217,7 +240,7 @@ func login() {
 	//get the email and password from the client
 
 	for _, user := range userStorage {
-		if user.Email == email && user.Password == password {
+		if user.Email == email && user.Password == hashThePassword(password) {
 			authenticatedUser = &user
 
 			break
@@ -239,7 +262,7 @@ func listTask() {
 	}
 }
 
-func loadUserStorageFromFile(){
+func loadUserStorageFromFile(serializationMode string){
 	file, err :=os.Open(userStoragePath)
 	if err != nil {
 		fmt.Println("cant open the file", err)
@@ -251,61 +274,51 @@ func loadUserStorageFromFile(){
 	if oErr != nil {
 		fmt.Println("cant read from the file", oErr)
 
+		return
+
 	}
 	var dataStr = string(data)
 
-	//dataStr = strings.Trim(dataStr, "\n")
 
 	userSlice := strings.Split(dataStr, "\n")
-	fmt.Println("userSlice" , len(userSlice))
+	fmt.Println("len userSlice", len(userSlice), serializationMode)
+	
 	for _, u := range userSlice {
-		if u == "" {
+
+		var userStruct = User{}
+
+		switch serializationMode {
+		case ManDarAvordiSerializationMode:
+			var dErr error
+			userStruct, dErr =deserilizeFromManDaravardi(u)
+		if dErr != nil {
+			fmt.Println("cant deserialize user record to user struct", dErr)
+
+			return
+		}
+	case JsonSerializationMode:
+		if u[0] != '{' && u[len(u)-1] != '}' {
+
 			continue
 		}
-		//fmt.Println("line of file",index,"user", u)
-		/*user := User{
-			ID: 0,
-			Name: "",
-			Email: "",
-			Password: "",
-		}*/
-		var user = User{}
-		userFields := strings.Split(u, ",")
-		for _, field := range userFields {
-			// fmt.Println(field)
-			values := strings.Split(field, ": ")
-			if len(values) != 2 {
-				fmt.Println("record is not valid", len(values))
+		
+		uErr := json.Unmarshal([]byte(u),&userStruct)
+		if uErr != nil {
+			fmt.Println("cant deserialize user record to user struct with json mode", uErr)
 
-				 continue
-			}
-			fieldName := strings.ReplaceAll(values[0], "", "")
-			fieldValue := values[1]
-
-			
-
-			switch fieldName {
-			case "id":
-				id, err := strconv.Atoi(fieldValue)
-				if err != nil {
-					fmt.Println("strconv error", err)
-					return 
-				}
-				user.ID = id
-			case "name":
-				 user.Name = fieldValue
-			case "email":
-				user.Email = fieldValue
-			case "password":
-				user.Password = fieldValue		 
-
-			}
-			
+			return
 		}
-		fmt.Printf("user: %+v\n", user)
-	}
+	default:
+		fmt.Println("invalid sererasition mode")
 
-	//fmt.Println(data)
+		return
+	}
+		
+		
+		userStorage = append(userStorage, userStruct)
+	}
+  
+	
 }
 
 func writeUserToFile(user User){
@@ -321,12 +334,34 @@ func writeUserToFile(user User){
 	
 	defer file.Close()
 
-	data :=fmt.Sprintf("id: %d, name: %s, email: %s,password: %s\n", user.ID, user.Name,
-	 user.Email, user.Password)
+	var data []byte
+	// serialize
+	if serializationMode == ManDarAvordiSerializationMode {
+		
+		data =[]byte(fmt.Sprintf("id: %d, name: %s, email: %s,password: %s\n", user.ID, user.Name,
+		user.Email, user.Password))
 
-	var b = []byte(data)
+	}else if serializationMode == JsonSerializationMode {
+		//json
 
-	numberOfWrittenBytes, wErr := file.Write(b)
+		var jErr error
+		data, jErr = json.Marshal(user)
+		if jErr!= nil {
+			fmt.Println("cant marshal user struct to json", jErr)
+
+			return
+		}
+		data = append(data, []byte("\n")...)
+	} else {
+		fmt.Println("invalid serialization mode")
+
+		return
+	}
+	
+
+	
+
+	numberOfWrittenBytes, wErr := file.Write(data)
 	if wErr != nil {
 		fmt.Printf("cant write to the file %v\n", wErr)
 
@@ -335,4 +370,53 @@ func writeUserToFile(user User){
 	fmt.Println("numberOfWrittenBytes", numberOfWrittenBytes)
 
 
+}
+
+func deserilizeFromManDaravardi(userStr string)(User,error){
+
+	if userStr == "" {
+		return User{}, errors.New("user string is empty")
+	}
+
+	var user = User{}
+
+	userFields := strings.Split(userStr, ",")
+	for _, field := range userFields {
+		
+		values := strings.Split(field, ": ")
+		if len(values) != 2 {
+			fmt.Println("record is not valid", len(values))
+
+			 continue
+		}
+		fieldName := strings.ReplaceAll(values[0], " ", " ")
+		fieldValue := values[1]
+
+		
+
+		switch fieldName {
+		case "id":
+			id, err := strconv.Atoi(fieldValue)
+			if err != nil {
+				
+				return User{},errors.New("strconv error")
+			}
+			user.ID = id
+		case "name":
+			 user.Name = fieldValue
+		case "email":
+			user.Email = fieldValue
+		case "password":
+			user.Password = fieldValue		 
+
+		}
+		
+	}
+	return user, nil
+}
+
+func hashThePassword(password string) string {
+	hash := md5.Sum([]byte(password))
+
+	return hex.EncodeToString(hash[:])
 }
