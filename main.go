@@ -50,6 +50,10 @@ const (
 	JsonSerializationMode = "json"
 )
 
+var userFileStore = fileStore{
+		filePath: userStoragePath,
+	}
+
 
 func main() {
 	serializeMode := flag.String("serialize-mode", ManDarAvardiSerializationMode, "serialization mode to write data to file")
@@ -59,15 +63,7 @@ func main() {
 	// load user storage from file
 	//loadUserStorageFromFile(*serializeMode)
 
-	var userReadFileStore userReadStore
-
-	var userReadStore = fileStore{
-		filePath: "./store/data.txt",
-	}
-
-	userReadFileStore = userReadStore
-
-	loadUserFromStorage(userReadFileStore, *serializeMode)
+	loadUserFromStorage(userFileStore, *serializeMode)
 
 	fmt.Println("Hello to TODO app")
 
@@ -98,21 +94,16 @@ func runCommand(command string) {
 		}
 	}
 
-	var store userWriteStore
+	
 
-	var userFileStore = fileStore{
-		filePath: "./store/user.txt",
-	}
-
-	store = userFileStore
-
+	
 	switch command {
 	case "create-task":
 		createTask()
 	case "create-category":
 		createCategory()
 	case "register-user":
-		registerUser(store)
+		registerUser(userFileStore)
 	case "list-task":
 		listTask()
 	case "login":
@@ -281,10 +272,10 @@ func loadUserFromStorage(store userReadStore, serializationMode string) {
 userStorage = append(userStorage, users...)
 }
 
-func writeUserToFile(user User) {
+func (f fileStore) writeUserToFile(user User) {
 	var file *os.File
 
-	file, err := os.OpenFile(userStoragePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	file, err := os.OpenFile(f.filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		fmt.Println("can't create or open file", err)
 
@@ -376,13 +367,13 @@ type fileStore struct {
 }
 
 func (f fileStore) Save(u User) {
-	writeUserToFile(u)
+	f.writeUserToFile(u)
 }
 
 func (f fileStore) Load(serializationMode string) []User {
 	var uStore []User
 
-	file, err := os.Open(userStoragePath)
+	file, err := os.Open(f.filePath)
 	if err != nil {
 		fmt.Println("can't open the file", err)
 	}
@@ -412,9 +403,11 @@ func (f fileStore) Load(serializationMode string) []User {
 				return nil
 			}
 		case JsonSerializationMode:
-			if u[0] != '{' && u[len(u)-1] != '}' {
-				continue
-			}
+			u = strings.TrimSpace(u)
+          if u == "" {
+	       continue
+         }
+
 
 			uErr := json.Unmarshal([]byte(u), &userStruct)
 			if uErr != nil {
