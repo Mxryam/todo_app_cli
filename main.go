@@ -4,18 +4,16 @@ import (
 	"bufio"
 	"crypto/md5"
 	"encoding/hex"
-	
-	
+
 	"flag"
 	"fmt"
 	"os"
 	"strconv"
-	
 
+	"example.com/m/contract"
 	"example.com/m/entity"
 	"example.com/m/filestore"
-	"example.com/m/contract"
-
+	"example.com/m/constant"
 )
 
 
@@ -50,7 +48,7 @@ const (
 
 
 func main() {
-	serializeMode := flag.String("serialize-mode", ManDarAvardiSerializationMode, "serialization mode to write data to file")
+	serializeMode := flag.String("serialize-mode", constant.ManDarAvardiSerializationMode, "serialization mode to write data to file")
 	command := flag.String("command", "no-command", "command to run")
 	flag.Parse()
 
@@ -61,10 +59,10 @@ func main() {
 	fmt.Println("Hello to TODO app")
 
 	switch *serializeMode {
-	case ManDarAvardiSerializationMode:
-		serializationMode = ManDarAvardiSerializationMode
+	case constant.ManDarAvardiSerializationMode:
+		serializationMode = constant.ManDarAvardiSerializationMode
 	default:
-		serializationMode = JsonSerializationMode
+		serializationMode = constant.JsonSerializationMode
 	}
 
 	var userFileStore = filestore.New(userStoragePath, serializationMode)
