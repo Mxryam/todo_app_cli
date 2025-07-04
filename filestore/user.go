@@ -6,15 +6,14 @@ import (
 	"os"
 	"strings"
 
-	"example.com/m/entity"
-	"example.com/m/constant"
 	"errors"
+	"example.com/m/constant"
+	"example.com/m/entity"
 	"strconv"
 )
 
-
 type FileStore struct {
-	filePath string
+	filePath          string
 	serializationMode string
 }
 
@@ -33,7 +32,10 @@ func (f FileStore) Load() []entity.User {
 	file, err := os.Open(f.filePath)
 	if err != nil {
 		fmt.Println("can't open the file", err)
+
+		return nil
 	}
+	defer file.Close()
 
 	var data = make([]byte, 1024)
 	_, oErr := file.Read(data)
@@ -60,17 +62,15 @@ func (f FileStore) Load() []entity.User {
 				return nil
 			}
 		case constant.JsonSerializationMode:
-			u = strings.TrimSpace(u)
-          if u == "" {
-	       continue
-         }
-
+			if strings.TrimSpace(u) == "" {
+				continue
+			}
 
 			uErr := json.Unmarshal([]byte(u), &userStruct)
 			if uErr != nil {
 				fmt.Println("can't deserialize user record to user struct with json mode", uErr)
 
-				return nil
+				continue
 			}
 		default:
 			fmt.Println("invalid serialization mode")
