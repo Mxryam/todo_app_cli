@@ -4,21 +4,20 @@ import (
 	"bufio"
 	"crypto/md5"
 	"encoding/hex"
-	"encoding/json"
-	"errors"
+	
+	
 	"flag"
 	"fmt"
 	"os"
 	"strconv"
-	"strings"
+	
+
+	"example.com/m/entity"
+	"example.com/m/filestore"
+	"example.com/m/contract"
+
 )
 
-type User struct {
-	ID       int
-	Name     string
-	Email    string
-	Password string
-}
 
 type Task struct {
 	ID         int
@@ -38,21 +37,16 @@ type Category struct {
 
 var (
  categoryStorage   []Category
- userStorage	   []User
+ userStorage	   []entity.User
  taskStorage 	   []Task
- authenticatedUser *User
+ authenticatedUser *entity.User
  serializationMode  string
 )
 
 const (
 	userStoragePath = "user.txt"
-	ManDarAvardiSerializationMode = "mandaravordi"
-	JsonSerializationMode = "json"
 )
 
-var userFileStore = fileStore{
-		filePath: userStoragePath,
-	}
 
 
 func main() {
@@ -63,7 +57,6 @@ func main() {
 	// load user storage from file
 	//loadUserStorageFromFile(*serializeMode)
 
-	loadUserFromStorage(userFileStore, *serializeMode)
 
 	fmt.Println("Hello to TODO app")
 
@@ -73,10 +66,14 @@ func main() {
 	default:
 		serializationMode = JsonSerializationMode
 	}
+
+	var userFileStore = filestore.New(userStoragePath, serializationMode)
+	users := userFileStore.Load()
+	userStorage = append(userStorage,users... )
 	// if there is a user record with corresponding data allow the user to continue
 
 	for {
-		runCommand(*command)
+		runCommand(userFileStore,*command)
 
 		scanner := bufio.NewScanner(os.Stdin)
 		fmt.Println("please enter another command")
@@ -85,7 +82,7 @@ func main() {
 	}
 }
 
-func runCommand(command string) {
+func runCommand(store contract.UserWriteStore, command string) {
 	if command != "register-user" && command != "exit" && authenticatedUser == nil {
 		login()
 
@@ -103,7 +100,7 @@ func runCommand(command string) {
 	case "create-category":
 		createCategory()
 	case "register-user":
-		registerUser(userFileStore)
+		registerUser(store)
 	case "list-task":
 		listTask()
 	case "login":
@@ -192,15 +189,7 @@ func createCategory() {
 	categoryStorage = append(categoryStorage, c)
 }
 
-type userWriteStore interface {
-	Save(u User)
-}
-
-type userReadStore interface {
-	Load(serializationMode string) []User
-}
-
-func registerUser(store userWriteStore) {
+func registerUser(store contract.UserWriteStore) {
 	scanner := bufio.NewScanner(os.Stdin)
 	var id, name, email, password string
 
@@ -220,7 +209,7 @@ func registerUser(store userWriteStore) {
 
 	fmt.Println("user:", id, email, password)
 
-	user := User{
+	user := entity.User{
 		ID:       len(userStorage) + 1,
 		Name:     name,
 		Email:    email,
@@ -266,163 +255,9 @@ func listTask() {
 	}
 }
 
-func loadUserFromStorage(store userReadStore, serializationMode string) {
-	users := store.Load(serializationMode)
-
-userStorage = append(userStorage, users...)
-}
-
-func (f fileStore) writeUserToFile(user User) {
-	var file *os.File
-
-	file, err := os.OpenFile(f.filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		fmt.Println("can't create or open file", err)
-
-		return
-	}
-	defer file.Close()
-
-	var data []byte
-	// serialize the user struct/object
-	if serializationMode == ManDarAvardiSerializationMode {
-		data = []byte(fmt.Sprintf("id: %d, name: %s, email: %s, password: %s\n", user.ID, user.Name,
-			user.Email, user.Password))
-	} else if serializationMode == JsonSerializationMode {
-		//json
-
-		var jErr error
-		data, jErr = json.Marshal(user)
-		if jErr != nil {
-			fmt.Println("can't marshal user struct to json", jErr)
-
-			return
-		}
-
-		data = append(data, []byte("\n")...)
-
-	} else {
-		fmt.Println("invalid serialization mode")
-
-		return
-	}
-
-	numberOfWrittenBytes, wErr := file.Write(data)
-	if wErr != nil {
-		fmt.Printf("can't write to the file %v\n", wErr)
-
-		return
-	}
-
-	fmt.Println("numberOfWrittenBytes", numberOfWrittenBytes)
-}
-
-func deserilizeFromManDaravardi(userStr string) (User, error) {
-
-	if userStr == "" {
-		return User{}, errors.New("user string is empty")
-	}
-
-	var user = User{}
-
-	userFields := strings.Split(userStr, ",")
-	for _, field := range userFields {
-		values := strings.Split(field, ": ")
-		if len(values) != 2 {
-			fmt.Println("field is not valid, skipping...", len(values))
-
-			continue
-		}
-		fieldName := strings.ReplaceAll(values[0], " ", "")
-		fieldValue := values[1]
-
-		switch fieldName {
-		case "id":
-			id, err := strconv.Atoi(fieldValue)
-			if err != nil {
-				return User{}, errors.New("strconv error")
-			}
-			user.ID = id
-		case "name":
-			user.Name = fieldValue
-		case "email":
-			user.Email = fieldValue
-		case "password":
-			user.Password = fieldValue
-		}
-
-	}
-
-	return user, nil
-}
-
 func hashThePassword(password string) string {
 	hash := md5.Sum([]byte(password))
 
 	return hex.EncodeToString(hash[:])
 }
 
-type fileStore struct {
-	filePath string
-}
-
-func (f fileStore) Save(u User) {
-	f.writeUserToFile(u)
-}
-
-func (f fileStore) Load(serializationMode string) []User {
-	var uStore []User
-
-	file, err := os.Open(f.filePath)
-	if err != nil {
-		fmt.Println("can't open the file", err)
-	}
-
-	var data = make([]byte, 1024)
-	_, oErr := file.Read(data)
-	if oErr != nil {
-		fmt.Println("can't read from the file", oErr)
-
-		return nil
-	}
-
-	var dataStr = string(data)
-
-	userSlice := strings.Split(dataStr, "\n")
-	fmt.Println("len userSlice", len(userSlice), serializationMode)
-	for _, u := range userSlice {
-		var userStruct = User{}
-
-		switch serializationMode {
-		case ManDarAvardiSerializationMode:
-			var dErr error
-			userStruct, dErr = deserilizeFromManDaravardi(u)
-			if dErr != nil {
-				fmt.Println("can't deserialize user record to user struct", dErr)
-
-				return nil
-			}
-		case JsonSerializationMode:
-			u = strings.TrimSpace(u)
-          if u == "" {
-	       continue
-         }
-
-
-			uErr := json.Unmarshal([]byte(u), &userStruct)
-			if uErr != nil {
-				fmt.Println("can't deserialize user record to user struct with json mode", uErr)
-
-				return nil
-			}
-		default:
-			fmt.Println("invalid serialization mode")
-
-			return nil
-		}
-
-		uStore = append(uStore, userStruct)
-	}
-
-	return uStore
-}
